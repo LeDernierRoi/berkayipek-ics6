@@ -9,7 +9,7 @@
 
     /* Bundler mode */
     "moduleResolution": "Bundler",
-    "baseUrl": ".",
+    "baseUrl": "berkay.com",
     "allowImportingTsExtensions": true,
     "verbatimModuleSyntax": false,
     "noEmit": true,
