@@ -1,0 +1,29 @@
+## Typography & Font Overhaul Plan
+
+### 1. Load Plus Jakarta Sans
+Add Google Fonts `<link>` tags in `src/routes/__root.tsx` `head()` for **Plus Jakarta Sans** (weights 300, 400, 500, 600, 700, 800). This is a modern, clean geometric sans-serif widely used in premium esports/gaming UIs.
+
+### 2. Update CSS Theme Tokens (`src/styles.css`)
+- Replace `--font-display: "Oswald", "Impact", system-ui, sans-serif` with `--font-display: "Plus Jakarta Sans", system-ui, sans-serif`
+- Add `--font-body: "Plus Jakarta Sans", system-ui, sans-serif` to `@theme inline`
+- Ensure `body` rule applies the font-family via Tailwind's base setup (Tailwind v4 auto-applies `--font-sans` if mapped)
+
+### 3. Refine Heading & Body Styles (`src/routes/index.tsx`)
+Apply the following typography polish WITHOUT changing layout, colors, or functionality:
+
+| Element | Change |
+|---------|--------|
+| Main titles (`BERKAYCS2.COM`, `BERKAYCS2 RESMİ ÜS`, `VİDEOLAR`) | Keep `font-display`, add `tracking-wider` or `tracking-[0.12em]`, ensure `font-black` or `font-extrabold` |
+| Site card names (`ALUDHX`, `XM1NN`) | Add `tracking-wide`, keep `font-black` |
+| Subheadings / descriptions | Add `leading-relaxed` or `leading-7`, crisp readable spacing |
+| Tab labels (`Sitelere Git & Bonuslar`, `Videolar`) | Keep `uppercase tracking-wider`, ensure `font-bold` |
+| Body text / promo labels | Ensure `font-medium` or `font-semibold` where appropriate, not default weight |
+| Admin panel title | Add `tracking-wider` |
+
+### 4. Zero Breaking Changes
+- Do NOT touch: tab system (`activeTab`), neon crimson colors, admin panel logic/password, floating skins, social media icons, card grid layout, footer.
+- Do NOT add/remove any dependencies.
+- Do NOT change any class names that drive existing color/animation logic.
+
+### 5. Verification
+Run `npm run dev` (or `bun dev`) to confirm zero build/compile errors and that all text renders with the new font family.

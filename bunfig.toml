@@ -1,0 +1,960 @@
+import { createFileRoute } from "@tanstack/react-router";
+import { useServerFn } from "@tanstack/react-start";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
+import {
+  ArrowRight,
+  Calculator,
+  Check,
+  Cookie,
+  Copy,
+  Disc3,
+  ExternalLink,
+  FileText,
+  Flame,
+  Globe,
+  Home as HomeIcon,
+  Instagram,
+  Lock,
+  LogOut,
+  MessageCircle,
+  Pencil,
+  PlayCircle,
+  Plus,
+  ScrollText,
+  Shield,
+  Sword,
+  Target,
+  Trash2,
+  Trophy,
+  Users,
+  X,
+  Youtube,
+} from "lucide-react";
+import Scene3D from "@/components/Scene3D";
+import { I18nProvider, useI18n, type Lang } from "@/lib/i18n";
+import { verifyAdminPassword } from "@/lib/admin.functions";
+
+export const Route = createFileRoute("/")({
+  head: () => ({
+    meta: [
+      { title: "BERKAYCS2.COM — CS2 Bonus Hub" },
+      {
+        name: "description",
+        content:
+          "Berkaycs2.com resmi CS2 partner bonusları, topluluk bağlantıları, videolar ve envanter değer hesaplayıcı hub'ı.",
+      },
+      { property: "og:title", content: "BERKAYCS2.COM" },
+      { property: "og:description", content: "CS2 partner bonusları, videolar ve envanter hesaplayıcı." },
+    ],
+  }),
+  component: PageWrapper,
+});
+
+function PageWrapper() {
+  return (
+    <I18nProvider>
+      <HomePage />
+    </I18nProvider>
+  );
+}
+
+type Site = {
+  id: string;
+  name: string;
+  promoCode: string;
+  bonusTitle: string;
+  badge: string;
+  link: string;
+  logoUrl: string;
+};
+
+type Video = { id: string; title: string; thumbnail: string; url: string; publishedAt: string };
+type View = "home" | "bonuses" | "videos" | "calculator";
+type CalcSettings = { exchangeRate: number; ctaUrl: string; ctaLabel: string };
+
+const STORAGE_KEY = "berkaycs2_sites_v3";
+const ADMIN_SESSION_KEY = "berkaycs2_admin_session";
+const CALC_SETTINGS_KEY = "berkaycs2_calc_settings";
+
+const YT_MAIN = "https://www.youtube.com/@berkaycs2";
+const YT_CLIPS = "https://www.youtube.com/@berkaycs2clips";
+const DISCORD = "https://discord.gg/berkaycs2";
+
+const DEFAULT_CALC_SETTINGS: CalcSettings = {
+  exchangeRate: 34,
+  ctaUrl: "https://csgoskins.gg",
+  ctaLabel: "Bu Değeri Katlamak İster misin?",
+};
+
+const FALLBACK_SITES: Site[] = [
+  {
+    id: "csgoskins",
+    name: "CSGOSKINS",
+    promoCode: "BERKAY",
+    bonusTitle: "Skin marketinde özel indirim",
+    badge: "%10",
+    link: "https://csgoskins.gg",
+    logoUrl: "https://api.dicebear.com/9.x/initials/svg?seed=CS&backgroundColor=991b1b&textColor=fff7ed",
+  },
+  {
+    id: "skinsmonkey",
+    name: "SkinsMonkey",
+    promoCode: "BERKAY",
+    bonusTitle: "Trade bonus & ekstra değer",
+    badge: "%35",
+    link: "https://skinsmonkey.com",
+    logoUrl: "https://api.dicebear.com/9.x/initials/svg?seed=SM&backgroundColor=7f1d1d&textColor=fff7ed",
+  },
+  {
+    id: "casehug",
+    name: "CaseHug",
+    promoCode: "BERKAY",
+    bonusTitle: "İlk işlemde ek bakiye avantajı",
+    badge: "%20",
+    link: "https://casehug.com",
+    logoUrl: "https://api.dicebear.com/9.x/initials/svg?seed=CH&backgroundColor=881337&textColor=fff7ed",
+  },
+  {
+    id: "caseplanet",
+    name: "CasePlanet",
+    promoCode: "BERKAY",
+    bonusTitle: "Hoş geldin promosyon paketi",
+    badge: "%25",
+    link: "https://caseplanet.gg",
+    logoUrl: "https://api.dicebear.com/9.x/initials/svg?seed=CP&backgroundColor=9f1239&textColor=fff7ed",
+  },
+  {
+    id: "casestorm",
+    name: "CASESTORM",
+    promoCode: "BERKAY",
+    bonusTitle: "Premium kullanıcı bonusu",
+    badge: "%15",
+    link: "https://casestorm.com",
+    logoUrl: "https://api.dicebear.com/9.x/initials/svg?seed=CT&backgroundColor=be123c&textColor=fff7ed",
+  },
+  {
+    id: "csgorun",
+    name: "CSGORUN",
+    promoCode: "BERKAY",
+    bonusTitle: "Yatırım bonusu ve özel görevler",
+    badge: "%30",
+    link: "https://csgorun.gg",
+    logoUrl: "https://api.dicebear.com/9.x/initials/svg?seed=CR&backgroundColor=991b1b&textColor=fff7ed",
+  },
+];
+
+const VIDEOS: Video[] = [
+  {
+    id: "main",
+    title: "CS2 gündem, skin analizleri ve partner avantajları",
+    thumbnail: "https://images.unsplash.com/photo-1542751371-adc38448a05e?w=900&h=506&fit=crop",
+    url: YT_MAIN,
+    publishedAt: "Ana Kanal",
+  },
+  {
+    id: "clips",
+    title: "Kısa maç anları, highlight ve topluluk klipleri",
+    thumbnail: "https://images.unsplash.com/photo-1511512578047-dfb367046420?w=900&h=506&fit=crop",
+    url: YT_CLIPS,
+    publishedAt: "Clips",
+  },
+  {
+    id: "discord",
+    title: "Discord topluluğuna katıl, duyuruları kaçırma",
+    thumbnail: "https://images.unsplash.com/photo-1538481199705-c710c4e965fc?w=900&h=506&fit=crop",
+    url: DISCORD,
+    publishedAt: "Topluluk",
+  },
+];
+
+const LEADERBOARD = [
+  { rank: 1, user: "ProSniper_TR", points: 18420, avatar: "PS" },
+  { rank: 2, user: "DragonLore99", points: 16310, avatar: "DL" },
+  { rank: 3, user: "KarambitKing", points: 15880, avatar: "KK" },
+  { rank: 4, user: "AWP_Master", points: 13240, avatar: "AM" },
+  { rank: 5, user: "FlickGod", points: 11900, avatar: "FG" },
+  { rank: 6, user: "ClutchOrKick", points: 10420, avatar: "CK" },
+  { rank: 7, user: "EcoRoundHero", points: 9210, avatar: "EH" },
+  { rank: 8, user: "SmokeCriminal", points: 8740, avatar: "SC" },
+];
+
+const INVENTORY_ITEMS = [
+  { name: "AK-47 | Redline", price: 28, rarity: "Classified" },
+  { name: "M4A4 | Asiimov", price: 85, rarity: "Covert" },
+  { name: "AWP | Asiimov", price: 145, rarity: "Covert" },
+  { name: "Glock-18 | Fade", price: 380, rarity: "Restricted" },
+  { name: "USP-S | Kill Confirmed", price: 195, rarity: "Covert" },
+  { name: "Desert Eagle | Blaze", price: 520, rarity: "Restricted" },
+  { name: "Karambit | Doppler", price: 1850, rarity: "Knife" },
+  { name: "M9 Bayonet | Fade", price: 2200, rarity: "Knife" },
+  { name: "Sport Gloves | Pandora's Box", price: 1650, rarity: "Gloves" },
+  { name: "AWP | Dragon Lore", price: 12500, rarity: "Covert" },
+];
+
+const SOCIAL_LINKS = [
+  { label: "YouTube", href: YT_MAIN, Icon: Youtube },
+  { label: "YouTube Clips", href: YT_CLIPS, Icon: PlayCircle },
+  { label: "Discord", href: DISCORD, Icon: MessageCircle },
+  { label: "Instagram", href: "https://instagram.com/berkaycs2", Icon: Instagram },
+];
+
+function HomePage() {
+  const { t, lang, setLang } = useI18n();
+  const [sites, setSites] = useState<Site[]>(FALLBACK_SITES);
+  const [calcSettings, setCalcSettings] = useState<CalcSettings>(DEFAULT_CALC_SETTINGS);
+  const [activeView, setActiveView] = useState<View>("home");
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [heroCopied, setHeroCopied] = useState(false);
+  const [showLeaderboard, setShowLeaderboard] = useState(false);
+  const [legalOpen, setLegalOpen] = useState<null | "terms" | "privacy" | "cookies">(null);
+  const [showAdminModal, setShowAdminModal] = useState(false);
+  const [authed, setAuthed] = useState(false);
+  const [pw, setPw] = useState("");
+  const [authError, setAuthError] = useState("");
+  const [authBusy, setAuthBusy] = useState(false);
+  const [editing, setEditing] = useState<Site | null>(null);
+  const verifyPw = useServerFn(verifyAdminPassword);
+
+  useEffect(() => {
+    try {
+      if (sessionStorage.getItem(ADMIN_SESSION_KEY) === "1") setAuthed(true);
+      const rawSites = localStorage.getItem(STORAGE_KEY);
+      if (rawSites) {
+        const parsed = JSON.parse(rawSites) as Site[];
+        if (Array.isArray(parsed) && parsed.length) setSites(parsed);
+      }
+      const rawSettings = localStorage.getItem(CALC_SETTINGS_KEY);
+      if (rawSettings) setCalcSettings({ ...DEFAULT_CALC_SETTINGS, ...JSON.parse(rawSettings) });
+    } catch {}
+  }, []);
+
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.ctrlKey && event.shiftKey && event.key.toLowerCase() === "a") {
+        event.preventDefault();
+        setShowAdminModal(true);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
+  const persistSites = (next: Site[]) => {
+    setSites(next);
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+    } catch {}
+  };
+
+  const persistCalc = (next: CalcSettings) => {
+    setCalcSettings(next);
+    try {
+      localStorage.setItem(CALC_SETTINGS_KEY, JSON.stringify(next));
+    } catch {}
+  };
+
+  const copyText = async (id: string, text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedId(id);
+      setTimeout(() => setCopiedId(null), 1400);
+    } catch {}
+  };
+
+  const copyHero = async () => {
+    try {
+      await navigator.clipboard.writeText("BERKAY");
+      setHeroCopied(true);
+      setTimeout(() => setHeroCopied(false), 1400);
+    } catch {}
+  };
+
+  const closeAdmin = () => {
+    setShowAdminModal(false);
+    setPw("");
+    setAuthError("");
+    setEditing(null);
+  };
+
+  const logoutAdmin = () => {
+    setAuthed(false);
+    try {
+      sessionStorage.removeItem(ADMIN_SESSION_KEY);
+    } catch {}
+    closeAdmin();
+  };
+
+  const tryLogin = async () => {
+    if (authBusy || !pw) return;
+    setAuthBusy(true);
+    setAuthError("");
+    try {
+      const result = await verifyPw({ data: { password: pw } });
+      if (result?.ok) {
+        setAuthed(true);
+        setPw("");
+        try {
+          sessionStorage.setItem(ADMIN_SESSION_KEY, "1");
+        } catch {}
+      } else {
+        setAuthError(t("admin.error"));
+      }
+    } catch {
+      setAuthError(t("admin.error"));
+    } finally {
+      setAuthBusy(false);
+    }
+  };
+
+  const saveSite = (site: Site) => {
+    const exists = sites.some((item) => item.id === site.id);
+    persistSites(exists ? sites.map((item) => (item.id === site.id ? site : item)) : [...sites, site]);
+    setEditing(null);
+  };
+
+  const deleteSite = (id: string) => {
+    if (!confirm("Bu siteyi silmek istiyor musunuz?")) return;
+    persistSites(sites.filter((site) => site.id !== id));
+  };
+
+  const marqueeItems = useMemo(() => [...sites, ...sites], [sites]);
+
+  const navItems = [
+    { id: "home" as const, label: t("nav.home"), Icon: HomeIcon },
+    { id: "bonuses" as const, label: t("nav.bonuses"), Icon: Flame },
+    { id: "videos" as const, label: t("nav.videos"), Icon: Youtube },
+  ];
+
+  return (
+    <div className="app-shell relative flex min-h-screen flex-col overflow-hidden">
+      <div className="fixed inset-0 -z-20 mesh-bg" />
+      <div className="pointer-events-none absolute inset-0 -z-10 bg-cs-grid opacity-40" />
+      <Scene3D />
+      <FloatingSkins />
+
+      <Header
+        activeView={activeView}
+        navItems={navItems}
+        lang={lang}
+        onSetLang={() => setLang(lang === "tr" ? "en" : "tr")}
+        onView={setActiveView}
+        onLeaderboard={() => setShowLeaderboard(true)}
+      />
+
+      {activeView === "home" && (
+        <main className="relative z-10 flex-1">
+          <section className="mx-auto max-w-6xl px-5 pb-12 pt-16 text-center md:pt-24">
+            <div className="badge-crimson mb-7 inline-flex items-center gap-2 rounded-full px-4 py-2 text-[10px] font-extrabold uppercase tracking-[0.24em]">
+              <Target className="h-3.5 w-3.5" /> {t("hero.tag")}
+            </div>
+            <h1 className="mx-auto max-w-5xl font-display text-6xl font-black leading-none md:text-8xl">
+              <span className="brand-text">BERKAYCS2.COM</span>
+            </h1>
+            <p className="mx-auto mt-7 max-w-2xl text-base font-light leading-8 text-muted-foreground md:text-lg">{t("hero.desc")}</p>
+            <div className="mx-auto mt-10 max-w-md">
+              <button onClick={copyHero} className="panel group flex w-full items-center justify-between gap-4 rounded-xl px-5 py-4 text-left">
+                <span>
+                  <span className="block text-[10px] font-extrabold uppercase tracking-[0.28em] text-muted-foreground">{t("hero.promo")}</span>
+                  <span className="brand-text mt-1 block text-3xl font-black tracking-[0.2em]">BERKAY</span>
+                </span>
+                <span className="inline-flex items-center gap-2 text-xs font-black uppercase tracking-[0.18em] text-crimson-glow">
+                  {heroCopied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />} {heroCopied ? t("hero.copied") : t("hero.copy")}
+                </span>
+              </button>
+            </div>
+            <div className="mt-8 flex flex-wrap justify-center gap-3">
+              <button onClick={() => setActiveView("bonuses")} className="btn-crimson inline-flex items-center gap-2 rounded-xl px-6 py-3 text-xs font-black uppercase tracking-[0.18em]">
+                {t("hero.viewBonuses")} <ArrowRight className="h-4 w-4" />
+              </button>
+              <button onClick={() => setActiveView("calculator")} className="btn-ghost inline-flex items-center gap-2 rounded-xl px-6 py-3 text-xs font-black uppercase tracking-[0.18em]">
+                <Calculator className="h-4 w-4" /> {t("nav.calculator")}
+              </button>
+              <a href={DISCORD} target="_blank" rel="noopener noreferrer" className="btn-ghost inline-flex items-center gap-2 rounded-xl px-6 py-3 text-xs font-black uppercase tracking-[0.18em]">
+                <MessageCircle className="h-4 w-4" /> Discord
+              </a>
+            </div>
+          </section>
+
+          <section className="border-y border-border/70 bg-card/30 py-9 backdrop-blur-md">
+            <div className="mx-auto mb-5 flex max-w-7xl flex-wrap items-center justify-between gap-3 px-5">
+              <span className="badge-crimson inline-flex items-center gap-2 rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-[0.24em]">
+                <Flame className="h-3 w-3" /> {t("marquee.title")}
+              </span>
+              <span className="text-[10px] font-bold uppercase tracking-[0.22em] text-muted-foreground">{t("marquee.hint")}</span>
+            </div>
+            <div className="marquee-wrap overflow-hidden">
+              <div className="marquee-track gap-4 pr-4">
+                {marqueeItems.map((site, index) => (
+                  <MarqueeCard
+                    key={`${site.id}-${index}`}
+                    site={site}
+                    copied={copiedId === `m-${site.id}-${index}`}
+                    onCopy={() => copyText(`m-${site.id}-${index}`, site.promoCode)}
+                    copyLabel={t("hero.copy")}
+                    okLabel={t("hero.copied")}
+                    visitLabel={t("marquee.visit")}
+                  />
+                ))}
+              </div>
+            </div>
+          </section>
+
+          <section className="mx-auto grid max-w-7xl grid-cols-1 gap-5 px-5 py-16 md:grid-cols-3">
+            <StatCard icon={<Youtube className="h-5 w-5" />} label="YouTube" value="38.100" detail="@berkaycs2" />
+            <StatCard icon={<PlayCircle className="h-5 w-5" />} label="YouTube Clips" value="15.000" detail="@berkaycs2clips" />
+            <StatCard icon={<Users className="h-5 w-5" />} label="Community" value="16.9M" detail={t("stats.views")} />
+          </section>
+
+          <section className="mx-auto max-w-3xl px-5 pb-20 text-center">
+            <div className="badge-crimson mb-4 inline-flex items-center gap-2 rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-[0.22em]">
+              <Shield className="h-3 w-3" /> {t("about.tag")}
+            </div>
+            <h2 className="font-display text-3xl font-black md:text-4xl"><span className="brand-text">{t("about.title")}</span></h2>
+            <p className="mt-5 text-base font-light leading-8 text-muted-foreground">{t("about.body")}</p>
+          </section>
+        </main>
+      )}
+
+      {activeView === "bonuses" && (
+        <main className="relative z-10 mx-auto w-full max-w-7xl flex-1 px-5 py-14">
+          <SectionTitle tag={t("bonuses.tag")} title={t("bonuses.title")} description={t("bonuses.desc")} icon={<Flame className="h-3.5 w-3.5" />} />
+          <div className="mt-10 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+            {sites.map((site) => (
+              <BonusCard
+                key={site.id}
+                site={site}
+                copied={copiedId === site.id}
+                onCopy={() => copyText(site.id, site.promoCode)}
+                copyLabel={t("bonuses.copyCode")}
+                okLabel={t("hero.copied")}
+                goLabel={t("bonuses.goSite")}
+              />
+            ))}
+          </div>
+        </main>
+      )}
+
+      {activeView === "videos" && (
+        <main className="relative z-10 mx-auto w-full max-w-7xl flex-1 px-5 py-14">
+          <div className="flex flex-wrap items-end justify-between gap-4">
+            <SectionTitle tag={t("videos.tag")} title={t("videos.title")} icon={<Youtube className="h-3.5 w-3.5" />} align="left" />
+            <a href={YT_MAIN} target="_blank" rel="noopener noreferrer" className="btn-crimson inline-flex items-center gap-2 rounded-xl px-5 py-3 text-xs font-black uppercase tracking-[0.18em]">
+              {t("videos.channel")} <ExternalLink className="h-4 w-4" />
+            </a>
+          </div>
+          <div className="mt-10 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+            {VIDEOS.map((video) => (
+              <a key={video.id} href={video.url} target="_blank" rel="noopener noreferrer" className="panel group flex flex-col overflow-hidden rounded-xl transition-transform hover:-translate-y-1">
+                <div className="relative aspect-video overflow-hidden bg-card">
+                  <img src={video.thumbnail} alt={video.title} className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105" loading="lazy" />
+                  <div className="absolute inset-0 bg-gradient-to-t from-background/90 via-background/10 to-transparent" />
+                  <PlayCircle className="absolute inset-0 m-auto h-14 w-14 text-primary-foreground opacity-90 transition group-hover:scale-110" />
+                  <span className="badge-crimson absolute right-3 top-3 rounded-full px-2 py-1 text-[10px] font-black uppercase tracking-[0.16em]">{video.publishedAt}</span>
+                </div>
+                <div className="p-4">
+                  <h3 className="text-sm font-bold leading-6 text-foreground transition group-hover:text-crimson-glow">{video.title}</h3>
+                </div>
+              </a>
+            ))}
+          </div>
+        </main>
+      )}
+
+      {activeView === "calculator" && (
+        <main className="relative z-10 mx-auto w-full max-w-5xl flex-1 px-5 py-14">
+          <SectionTitle tag={t("calculator.tag")} title={t("calculator.title")} description={t("calculator.desc")} icon={<Calculator className="h-3.5 w-3.5" />} />
+          <div className="mt-10">
+            <InventoryCalculator settings={calcSettings} />
+          </div>
+        </main>
+      )}
+
+      <Footer onLegal={setLegalOpen} />
+
+      {showLeaderboard && <LeaderboardModal onClose={() => setShowLeaderboard(false)} />}
+      {legalOpen && <LegalModal type={legalOpen} onClose={() => setLegalOpen(null)} />}
+
+      {showAdminModal && (
+        <AdminModal onClose={closeAdmin}>
+          {!authed ? (
+            <AdminGate pw={pw} setPw={setPw} busy={authBusy} error={authError} onLogin={tryLogin} />
+          ) : (
+            <AdminDashboard
+              sites={sites}
+              editing={editing}
+              setEditing={setEditing}
+              onSave={saveSite}
+              onDelete={deleteSite}
+              onLogout={logoutAdmin}
+              calcSettings={calcSettings}
+              onSaveCalc={persistCalc}
+            />
+          )}
+        </AdminModal>
+      )}
+    </div>
+  );
+}
+
+function Header({
+  activeView,
+  navItems,
+  lang,
+  onSetLang,
+  onView,
+  onLeaderboard,
+}: {
+  activeView: View;
+  navItems: { id: View; label: string; Icon: typeof HomeIcon }[];
+  lang: Lang;
+  onSetLang: () => void;
+  onView: (view: View) => void;
+  onLeaderboard: () => void;
+}) {
+  const { t } = useI18n();
+  return (
+    <header className="sticky top-0 z-40 border-b border-border/70 bg-background/78 backdrop-blur-xl">
+      <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3 px-4 py-3">
+        <button onClick={() => onView("home")} className="flex min-w-0 items-center gap-3" aria-label="BERKAYCS2 home">
+          <span className="glow-bordo flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground">
+            <Shield className="h-5 w-5" />
+          </span>
+          <span className="brand-text truncate font-display text-lg font-black tracking-[0.16em] md:text-xl">BERKAYCS2</span>
+        </button>
+
+        <nav className="order-3 flex w-full items-center gap-1 overflow-x-auto rounded-xl border border-border/70 bg-card/55 p-1 md:order-none md:w-auto">
+          {navItems.map(({ id, label, Icon }) => (
+            <button
+              key={id}
+              onClick={() => onView(id)}
+              className={`flex min-w-max items-center justify-center gap-2 rounded-lg px-3 py-2 text-[10px] font-black uppercase tracking-[0.18em] md:px-4 ${activeView === id ? "nav-pill-active" : "nav-pill"}`}
+            >
+              <Icon className="h-3.5 w-3.5" /> {label}
+            </button>
+          ))}
+        </nav>
+
+        <div className="flex flex-wrap items-center justify-end gap-1.5">
+          <a href={YT_MAIN} target="_blank" rel="noopener noreferrer" aria-label="YouTube" className="icon-button"><Youtube className="h-4 w-4" /></a>
+          <a href={YT_CLIPS} target="_blank" rel="noopener noreferrer" aria-label="YouTube Clips" className="icon-button"><PlayCircle className="h-4 w-4" /></a>
+          <a href={DISCORD} target="_blank" rel="noopener noreferrer" aria-label="Discord" className="icon-button"><MessageCircle className="h-4 w-4" /></a>
+          <button onClick={onLeaderboard} aria-label={t("header.leaderboard")} title={t("header.leaderboard")} className="icon-button"><Trophy className="h-4 w-4" /></button>
+          <button onClick={() => onView("calculator")} className={`hidden items-center gap-2 rounded-lg px-3 py-2 text-[10px] font-black uppercase tracking-[0.16em] sm:flex ${activeView === "calculator" ? "nav-pill-active" : "btn-ghost"}`}>
+            <Calculator className="h-3.5 w-3.5" /> {t("nav.calculator")}
+          </button>
+          <button onClick={onSetLang} className="icon-button" aria-label="Change language"><Globe className="h-4 w-4" /><span className="sr-only">{lang.toUpperCase()}</span></button>
+        </div>
+      </div>
+    </header>
+  );
+}
+
+function SectionTitle({ tag, title, description, icon, align = "center" }: { tag: string; title: string; description?: string; icon: ReactNode; align?: "left" | "center" }) {
+  return (
+    <div className={align === "center" ? "text-center" : "text-left"}>
+      <div className="badge-crimson inline-flex items-center gap-2 rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-[0.22em]">
+        {icon} {tag}
+      </div>
+      <h2 className="mt-4 font-display text-4xl font-black md:text-6xl"><span className="brand-text">{title}</span></h2>
+      {description && <p className={`mt-4 max-w-xl text-sm leading-7 text-muted-foreground md:text-base ${align === "center" ? "mx-auto" : ""}`}>{description}</p>}
+    </div>
+  );
+}
+
+function StatCard({ icon, label, value, detail }: { icon: ReactNode; label: string; value: string; detail: string }) {
+  return (
+    <div className="panel rounded-xl p-6">
+      <div className="mb-6 flex items-center justify-between">
+        <span className="flex h-11 w-11 items-center justify-center rounded-lg bg-primary text-primary-foreground">{icon}</span>
+        <span className="text-[10px] font-black uppercase tracking-[0.22em] text-muted-foreground">{label}</span>
+      </div>
+      <div className="font-display text-4xl font-black text-foreground">{value}</div>
+      <div className="mt-1 text-[10px] font-bold uppercase tracking-[0.2em] text-crimson-glow">{detail}</div>
+    </div>
+  );
+}
+
+function MarqueeCard({ site, copied, onCopy, visitLabel, copyLabel, okLabel }: { site: Site; copied: boolean; onCopy: () => void; visitLabel: string; copyLabel: string; okLabel: string }) {
+  return (
+    <div className="panel flex w-[320px] shrink-0 flex-col gap-3 rounded-xl p-4">
+      <div className="flex items-center gap-3">
+        <img src={site.logoUrl} alt={`${site.name} logo`} className="h-12 w-12 shrink-0 rounded-lg border border-border object-cover" loading="lazy" />
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center justify-between gap-2">
+            <div className="truncate font-display font-black tracking-[0.08em]">{site.name}</div>
+            <span className="badge-crimson rounded-full px-2 py-0.5 text-[10px] font-black">{site.badge}</span>
+          </div>
+          <button onClick={onCopy} className="mt-2 flex w-full items-center justify-between gap-2 rounded-lg border border-border bg-card/70 px-2.5 py-1.5 transition hover:border-crimson-glow">
+            <span className="text-[11px] font-black tracking-[0.22em] text-crimson-glow">{site.promoCode}</span>
+            <span className="inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-[0.13em] text-muted-foreground">
+              {copied ? <Check className="h-3 w-3 text-crimson-glow" /> : <Copy className="h-3 w-3" />} {copied ? okLabel : copyLabel}
+            </span>
+          </button>
+        </div>
+      </div>
+      <a href={site.link} target="_blank" rel="noopener noreferrer" className="btn-crimson inline-flex w-full items-center justify-center gap-2 rounded-lg px-3 py-2 text-[10px] font-black uppercase tracking-[0.2em]">
+        {visitLabel} <ExternalLink className="h-3.5 w-3.5" />
+      </a>
+    </div>
+  );
+}
+
+function BonusCard({ site, copied, onCopy, copyLabel, okLabel, goLabel }: { site: Site; copied: boolean; onCopy: () => void; copyLabel: string; okLabel: string; goLabel: string }) {
+  return (
+    <article className="panel relative flex flex-col gap-5 rounded-xl p-6 transition-transform hover:-translate-y-1">
+      <span className="badge-crimson absolute right-4 top-4 rounded-full px-3 py-1 text-[11px] font-black tracking-[0.12em]">{site.badge}</span>
+      <div className="flex items-center gap-3 pr-16">
+        <img src={site.logoUrl} alt={`${site.name} logo`} className="h-14 w-14 shrink-0 rounded-lg border border-border object-cover" loading="lazy" />
+        <div className="min-w-0">
+          <h3 className="truncate font-display text-xl font-black tracking-[0.08em]">{site.name}</h3>
+          <p className="mt-0.5 truncate text-xs leading-5 text-muted-foreground">{site.bonusTitle}</p>
+        </div>
+      </div>
+      <div className="flex items-stretch overflow-hidden rounded-xl border border-border bg-card/70">
+        <div className="flex-1 px-4 py-3">
+          <div className="text-[9px] font-black uppercase tracking-[0.24em] text-muted-foreground">Promo</div>
+          <div className="text-base font-black tracking-[0.2em] text-foreground">{site.promoCode}</div>
+        </div>
+        <button onClick={onCopy} className="btn-crimson inline-flex items-center gap-1.5 px-4 text-xs font-black uppercase tracking-[0.16em]">
+          {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />} {copied ? okLabel : copyLabel}
+        </button>
+      </div>
+      <a href={site.link} target="_blank" rel="noopener noreferrer" className="btn-ghost inline-flex w-full items-center justify-center gap-2 rounded-xl px-4 py-3 text-xs font-black uppercase tracking-[0.2em]">
+        {goLabel} <ExternalLink className="h-4 w-4 text-crimson-glow" />
+      </a>
+    </article>
+  );
+}
+
+function InventoryCalculator({ settings }: { settings: CalcSettings }) {
+  const { t, lang } = useI18n();
+  const [steamId, setSteamId] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [items, setItems] = useState<{ name: string; price: number; rarity: string }[] | null>(null);
+
+  const run = () => {
+    if (!steamId.trim()) return;
+    setLoading(true);
+    setItems(null);
+    window.setTimeout(() => {
+      const count = 6 + (steamId.length % 5);
+      const picked = Array.from({ length: count }, (_, index) => INVENTORY_ITEMS[(steamId.charCodeAt(index % steamId.length) + index) % INVENTORY_ITEMS.length]);
+      setItems(picked);
+      setLoading(false);
+    }, 850);
+  };
+
+  const totalUsd = items?.reduce((sum, item) => sum + item.price, 0) ?? 0;
+  const totalTry = totalUsd * settings.exchangeRate;
+
+  return (
+    <div className="panel mx-auto max-w-3xl rounded-xl p-6">
+      <label className="block">
+        <span className="text-[10px] font-black uppercase tracking-[0.22em] text-muted-foreground">{t("calculator.label")}</span>
+        <div className="mt-2 flex flex-col gap-2 sm:flex-row">
+          <input value={steamId} onChange={(event) => setSteamId(event.target.value)} onKeyDown={(event) => event.key === "Enter" && run()} placeholder="STEAM_0:1:12345678 / berkaycs2" className="input-bordo min-h-11 flex-1 rounded-lg px-3 py-2.5 text-sm" />
+          <button onClick={run} disabled={loading || !steamId.trim()} className="btn-crimson min-h-11 rounded-lg px-5 text-xs font-black uppercase tracking-[0.18em]">
+            {loading ? t("calculator.loading") : t("calculator.button")}
+          </button>
+        </div>
+      </label>
+
+      {items && (
+        <div className="mt-6 space-y-4">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div className="panel-soft rounded-xl p-4">
+              <div className="text-[10px] font-black uppercase tracking-[0.22em] text-muted-foreground">{t("calculator.total")}</div>
+              <div className="brand-text mt-1 font-display text-4xl font-black">${totalUsd.toLocaleString()}</div>
+              <div className="text-xs text-muted-foreground">≈ ₺{totalTry.toLocaleString(lang === "tr" ? "tr-TR" : "en-US")}</div>
+            </div>
+            <div className="panel-soft rounded-xl p-4">
+              <div className="text-[10px] font-black uppercase tracking-[0.22em] text-muted-foreground">{t("calculator.items")}</div>
+              <div className="mt-1 font-display text-4xl font-black text-crimson-glow">{items.length}</div>
+              <div className="text-xs text-muted-foreground">Market estimate</div>
+            </div>
+          </div>
+          <div className="grid max-h-72 grid-cols-1 gap-2 overflow-y-auto pr-1 sm:grid-cols-2">
+            {items.map((item, index) => (
+              <div key={`${item.name}-${index}`} className="panel-soft flex items-center justify-between gap-3 rounded-lg p-3">
+                <div className="min-w-0">
+                  <div className="truncate text-xs font-bold">{item.name}</div>
+                  <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-muted-foreground">{item.rarity}</div>
+                </div>
+                <div className="text-sm font-black text-crimson-glow">${item.price}</div>
+              </div>
+            ))}
+          </div>
+          <a href={settings.ctaUrl} target="_blank" rel="noopener noreferrer" className="btn-crimson inline-flex w-full items-center justify-center gap-2 rounded-xl py-3 text-xs font-black uppercase tracking-[0.18em]">
+            {settings.ctaLabel || t("calculator.cta")} <ArrowRight className="h-4 w-4" />
+          </a>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function Footer({ onLegal }: { onLegal: (type: "terms" | "privacy" | "cookies") => void }) {
+  const { t } = useI18n();
+  return (
+    <footer className="relative z-10 mt-auto border-t border-border/70 bg-background/76 backdrop-blur-xl">
+      <div className="mx-auto flex max-w-7xl flex-col items-center justify-between gap-4 px-5 py-8 text-sm text-muted-foreground md:flex-row">
+        <div>© {new Date().getFullYear()} <span className="brand-text font-black">BERKAYCS2.COM</span> — {t("footer.rights")}</div>
+        <div className="flex flex-wrap items-center justify-center gap-4 text-xs">
+          <button onClick={() => onLegal("terms")} className="inline-flex items-center gap-1 transition hover:text-crimson-glow"><FileText className="h-3 w-3" /> {t("legal.terms")}</button>
+          <button onClick={() => onLegal("privacy")} className="inline-flex items-center gap-1 transition hover:text-crimson-glow"><ScrollText className="h-3 w-3" /> {t("legal.privacy")}</button>
+          <button onClick={() => onLegal("cookies")} className="inline-flex items-center gap-1 transition hover:text-crimson-glow"><Cookie className="h-3 w-3" /> {t("legal.cookies")}</button>
+        </div>
+        <div className="flex items-center gap-2">
+          {SOCIAL_LINKS.map(({ label, href, Icon }) => (
+            <a key={label} href={href} target="_blank" rel="noopener noreferrer" aria-label={label} className="icon-button h-8 w-8"><Icon className="h-3.5 w-3.5" /></a>
+          ))}
+        </div>
+      </div>
+    </footer>
+  );
+}
+
+function Modal({ children, onClose, title, subtitle, icon }: { children: ReactNode; onClose: () => void; title: string; subtitle?: string; icon: ReactNode }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/88 p-4 backdrop-blur-sm" onClick={onClose}>
+      <div onClick={(event) => event.stopPropagation()} className="panel w-full max-w-2xl overflow-hidden rounded-xl">
+        <div className="flex items-center justify-between border-b border-border/70 bg-card/70 p-5 backdrop-blur">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary text-primary-foreground glow-bordo">{icon}</div>
+            <div>
+              <h3 className="brand-text font-display text-lg font-black tracking-[0.1em]">{title}</h3>
+              {subtitle && <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-muted-foreground">{subtitle}</p>}
+            </div>
+          </div>
+          <button onClick={onClose} className="icon-button"><X className="h-4 w-4" /></button>
+        </div>
+        <div className="max-h-[75vh] overflow-y-auto p-6">{children}</div>
+      </div>
+    </div>
+  );
+}
+
+function LeaderboardModal({ onClose }: { onClose: () => void }) {
+  const { t } = useI18n();
+  return (
+    <Modal onClose={onClose} icon={<Trophy className="h-5 w-5" />} title={t("lb.title")} subtitle={t("lb.subtitle")}>
+      <div className="overflow-hidden rounded-xl border border-border bg-card/60">
+        <div className="grid grid-cols-[64px_1fr_auto] gap-3 border-b border-border px-4 py-3 text-[10px] font-black uppercase tracking-[0.22em] text-muted-foreground">
+          <span>{t("lb.rank")}</span><span>{t("lb.user")}</span><span>{t("lb.points")}</span>
+        </div>
+        {LEADERBOARD.map((row) => (
+          <div key={row.rank} className="grid grid-cols-[64px_1fr_auto] items-center gap-3 border-b border-border/60 px-4 py-3 transition hover:bg-secondary/50">
+            <span className="font-display text-base font-black text-crimson-glow">#{row.rank}</span>
+            <span className="flex items-center gap-2 text-sm font-bold"><span className="badge-crimson flex h-7 w-7 items-center justify-center rounded-full text-[10px] font-black">{row.avatar}</span>{row.user}</span>
+            <span className="text-sm font-black text-crimson-glow">{row.points.toLocaleString()}</span>
+          </div>
+        ))}
+      </div>
+    </Modal>
+  );
+}
+
+function LegalModal({ type, onClose }: { type: "terms" | "privacy" | "cookies"; onClose: () => void }) {
+  const { t } = useI18n();
+  return (
+    <Modal onClose={onClose} icon={<FileText className="h-5 w-5" />} title={t(`legal.${type}`)}>
+      <p className="text-sm font-light leading-7 text-muted-foreground">{t(`legal.${type}.body`)}</p>
+      <button onClick={onClose} className="btn-crimson mt-6 w-full rounded-xl py-3 text-xs font-black uppercase tracking-[0.18em]">{t("legal.close")}</button>
+    </Modal>
+  );
+}
+
+function AdminModal({ children, onClose }: { children: ReactNode; onClose: () => void }) {
+  const { t } = useI18n();
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/90 p-4 backdrop-blur-sm" onClick={onClose}>
+      <div onClick={(event) => event.stopPropagation()} className="panel w-full max-w-4xl overflow-hidden rounded-xl">
+        <div className="flex items-center justify-between border-b border-border/70 bg-card/70 p-5 backdrop-blur">
+          <h3 className="brand-text font-display text-xl font-black tracking-[0.14em]">{t("admin.title")}</h3>
+          <button onClick={onClose} className="icon-button"><X className="h-4 w-4" /></button>
+        </div>
+        <div className="max-h-[78vh] overflow-y-auto p-6">{children}</div>
+      </div>
+    </div>
+  );
+}
+
+function AdminGate({ pw, setPw, busy, error, onLogin }: { pw: string; setPw: (value: string) => void; busy: boolean; error: string; onLogin: () => void }) {
+  const { t } = useI18n();
+  return (
+    <div className="mx-auto max-w-sm space-y-5 py-7">
+      <div className="text-center">
+        <div className="glow-bordo mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-xl bg-primary text-primary-foreground">
+          <Lock className="h-7 w-7" />
+        </div>
+        <h4 className="brand-text font-display text-2xl font-black tracking-[0.14em]">Admin Gate</h4>
+        <p className="mt-1 text-[10px] font-black uppercase tracking-[0.22em] text-muted-foreground">BERKAYCS2 SECURE ACCESS</p>
+      </div>
+      <label className="block rounded-xl border border-border bg-card/70 p-5">
+        <span className="mb-2 flex items-center gap-1.5 text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground">
+          <Lock className="h-3 w-3" /> {t("admin.password")}
+        </span>
+        <input
+          type="password"
+          value={pw}
+          onChange={(event) => setPw(event.target.value)}
+          onKeyDown={(event) => event.key === "Enter" && onLogin()}
+          autoFocus
+          autoComplete="current-password"
+          disabled={busy}
+          placeholder="••••••••"
+          className="input-bordo w-full rounded-lg px-3 py-2.5 font-mono text-sm tracking-[0.2em] disabled:opacity-60"
+        />
+      </label>
+      {error && <p className="text-xs font-bold text-destructive">{error}</p>}
+      <button onClick={onLogin} disabled={busy || !pw} className="btn-crimson flex w-full items-center justify-center gap-2 rounded-xl py-3 text-sm font-black uppercase tracking-[0.18em]">
+        {busy ? "..." : <>➔ {t("admin.login")}</>}
+      </button>
+    </div>
+  );
+}
+
+function AdminDashboard({
+  sites,
+  editing,
+  setEditing,
+  onSave,
+  onDelete,
+  onLogout,
+  calcSettings,
+  onSaveCalc,
+}: {
+  sites: Site[];
+  editing: Site | null;
+  setEditing: (site: Site | null) => void;
+  onSave: (site: Site) => void;
+  onDelete: (id: string) => void;
+  onLogout: () => void;
+  calcSettings: CalcSettings;
+  onSaveCalc: (settings: CalcSettings) => void;
+}) {
+  const startNew = () => setEditing({ id: `site_${Date.now()}`, name: "", promoCode: "BERKAY", bonusTitle: "", badge: "%20", link: "", logoUrl: "" });
+  const [settingsDraft, setSettingsDraft] = useState(calcSettings);
+
+  if (editing) return <SiteForm site={editing} onCancel={() => setEditing(null)} onSave={onSave} />;
+
+  return (
+    <div className="space-y-7">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h4 className="font-display text-xl font-black tracking-[0.06em]">Aktif Partner Siteleri ({sites.length})</h4>
+        <div className="flex gap-2">
+          <button onClick={startNew} className="btn-crimson inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-black uppercase tracking-[0.14em]"><Plus className="h-4 w-4" /> Yeni Ekle</button>
+          <button onClick={onLogout} className="btn-ghost inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-black uppercase tracking-[0.14em]"><LogOut className="h-4 w-4" /> Çıkış</button>
+        </div>
+      </div>
+
+      <div className="space-y-2">
+        {sites.map((site) => (
+          <div key={site.id} className="panel-soft flex items-center gap-3 rounded-xl p-3">
+            <img src={site.logoUrl} alt="" className="h-10 w-10 shrink-0 rounded-lg border border-border object-cover" />
+            <div className="min-w-0 flex-1">
+              <div className="truncate font-bold">{site.name} <span className="text-crimson-glow">{site.badge}</span></div>
+              <div className="truncate text-xs text-muted-foreground">{site.bonusTitle} • {site.promoCode}</div>
+            </div>
+            <button onClick={() => setEditing(site)} className="icon-button"><Pencil className="h-4 w-4" /></button>
+            <button onClick={() => onDelete(site.id)} className="icon-button text-destructive"><Trash2 className="h-4 w-4" /></button>
+          </div>
+        ))}
+      </div>
+
+      <form
+        onSubmit={(event) => {
+          event.preventDefault();
+          onSaveCalc({ ...settingsDraft, exchangeRate: Number(settingsDraft.exchangeRate) || DEFAULT_CALC_SETTINGS.exchangeRate });
+        }}
+        className="panel-soft space-y-4 rounded-xl p-5"
+      >
+        <h4 className="font-display text-lg font-black tracking-[0.06em]">Inventory Value Calculator Settings</h4>
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+          <AdminInput label="TRY Exchange Rate" value={String(settingsDraft.exchangeRate)} onChange={(value) => setSettingsDraft((draft) => ({ ...draft, exchangeRate: Number(value) }))} />
+          <AdminInput label="CTA URL" value={settingsDraft.ctaUrl} onChange={(value) => setSettingsDraft((draft) => ({ ...draft, ctaUrl: value }))} />
+          <AdminInput label="CTA Label" value={settingsDraft.ctaLabel} onChange={(value) => setSettingsDraft((draft) => ({ ...draft, ctaLabel: value }))} />
+        </div>
+        <button type="submit" className="btn-crimson rounded-lg px-4 py-2 text-xs font-black uppercase tracking-[0.14em]">Ayarları Kaydet</button>
+      </form>
+    </div>
+  );
+}
+
+function SiteForm({ site, onSave, onCancel }: { site: Site; onSave: (site: Site) => void; onCancel: () => void }) {
+  const [form, setForm] = useState<Site>(site);
+  const set = <K extends keyof Site>(key: K, value: Site[K]) => setForm((current) => ({ ...current, [key]: value }));
+  const fields: { key: keyof Site; label: string; placeholder: string }[] = [
+    { key: "name", label: "Site Adı", placeholder: "CSGOSKINS" },
+    { key: "promoCode", label: "Promo Kodu", placeholder: "BERKAY" },
+    { key: "bonusTitle", label: "Bonus Başlığı", placeholder: "%10 Hoşgeldin Bonusu" },
+    { key: "badge", label: "Bonus Yüzdesi", placeholder: "%20" },
+    { key: "link", label: "Yönlendirme Linki", placeholder: "https://..." },
+    { key: "logoUrl", label: "Logo Görsel URL", placeholder: "https://.../logo.png" },
+  ];
+
+  return (
+    <form onSubmit={(event) => { event.preventDefault(); if (form.name && form.link) onSave(form); }} className="space-y-4">
+      <h4 className="font-display text-xl font-black tracking-[0.06em]">{site.name ? "Site Düzenle" : "Yeni Site Ekle"}</h4>
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+        {fields.map((field) => (
+          <AdminInput key={field.key} label={field.label} value={form[field.key]} placeholder={field.placeholder} required={field.key === "name" || field.key === "link"} onChange={(value) => set(field.key, value)} />
+        ))}
+      </div>
+      {form.logoUrl && <div className="flex items-center gap-3 text-xs text-muted-foreground">Önizleme: <img src={form.logoUrl} alt="" className="h-12 w-12 rounded-lg border border-border object-cover" /></div>}
+      <div className="flex gap-2 pt-2">
+        <button type="submit" className="btn-crimson rounded-lg px-4 py-2 text-xs font-black uppercase tracking-[0.14em]">Kaydet</button>
+        <button type="button" onClick={onCancel} className="btn-ghost rounded-lg px-4 py-2 text-xs font-black uppercase tracking-[0.14em]">İptal</button>
+      </div>
+    </form>
+  );
+}
+
+function AdminInput({ label, value, onChange, placeholder, required }: { label: string; value: string; onChange: (value: string) => void; placeholder?: string; required?: boolean }) {
+  return (
+    <label className="block">
+      <span className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground">{label}</span>
+      <input required={required} value={value} onChange={(event) => onChange(event.target.value)} placeholder={placeholder} className="input-bordo mt-1 w-full rounded-lg px-3 py-2 text-sm" />
+    </label>
+  );
+}
+
+function FloatingSkins() {
+  const items = useMemo(() => {
+    const icons = [Sword, Target, Disc3, Flame];
+    return Array.from({ length: 14 }, (_, index) => {
+      const Icon = icons[index % icons.length];
+      return {
+        Icon,
+        left: `${(index * 7.3) % 95}%`,
+        size: 38 + ((index * 17) % 54),
+        dur: 29 + ((index * 5) % 20),
+        delay: -((index * 3) % 24),
+        rot: (index * 37) % 360,
+        opacity: 0.05 + ((index % 4) * 0.02),
+      };
+    });
+  }, []);
+
+  return (
+    <div aria-hidden className="pointer-events-none absolute inset-0 z-0 overflow-hidden">
+      {items.map((item, index) => (
+        <div
+          key={index}
+          className="floating-skin"
+          style={{
+            left: item.left,
+            ["--dur" as never]: `${item.dur}s`,
+            ["--delay" as never]: `${item.delay}s`,
+            ["--rot" as never]: `${item.rot}deg`,
+            ["--max-opacity" as never]: item.opacity,
+          }}
+        >
+          <item.Icon width={item.size} height={item.size} className="text-crimson-glow" strokeWidth={1.2} />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+export type { Lang };
