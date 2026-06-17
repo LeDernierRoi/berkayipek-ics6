@@ -1,8 +1,6 @@
-node_modules
-dist
-.output
-.vinxi
-pnpm-lock.yaml
-package-lock.json
-bun.lock
-routeTree.gen.ts
+import { defineConfig } from 'vite';
+import react from '@vitejs/plugin-react';
+
+export default defineConfig({
+  plugins: [react()],
+});
